@@ -1,0 +1,41 @@
+*Pick And Place List
+*Company=
+*Author=
+*eMail=
+*
+*Project=esp32_single_v2
+*Date=13:14:58
+*CreatedBy=Fritzing 0.9.3b.04.19.5c895d327c44a3114e5fcc9d8260daf0cbb52806
+*
+*
+*Coordinates in mm, always center of component
+*Origin 0/0=Lower left corner of PCB
+*Rotation in degree (0-360, math. pos.)
+*
+*No;Value;Package;X;Y;Rotation;Side;Name
+1;;;2.47587;-13.2637;0;Bottom;TXT3
+2;;;25.801;-61.9444;-90;Bottom;TXT3
+3;;;32.2796;-75.714;-90;Bottom;TXT3
+4;;;3.35957;-88.5886;0;Bottom;Hole4
+5;;;30.2595;-4.68847;0;Bottom;Hole1
+6;;;2.37441;-15.8976;0;Bottom;TXT3
+7;;;12.1744;-66.3213;-90;Bottom;TXT3
+8;;;34.2594;-88.3885;0;Bottom;Hole3
+9;;jst-4-pth;28.9595;-61.5884;0;Bottom;I2C_2
+10;;;6.2596;-4.68847;0;Bottom;Hole2
+11;;;18.6609;-30.2428;-90;Bottom;TXT4
+12;;;27.8948;-75.5325;-90;Bottom;TXT3
+13;;;19.334;-88.0426;0;Bottom;IMG1
+14;;jst-4-pth;28.9595;-75.1884;0;Bottom;I2C_1
+15;;;30.2121;-62.1399;-90;Bottom;TXT3
+16;;;6.9327;-66.281;-90;Bottom;TXT3
+17;;;19.4046;-83.9802;0;Bottom;TXT4
+18;;;27.895;-61.9325;-90;Bottom;TXT3
+19;;;18.9199;-28.5064;0;Bottom;ESP32
+20;;;32.2799;-62.114;-90;Bottom;TXT3
+21;;;15.4812;-30.6945;-90;Bottom;TXT4
+22;;THT;7.98954;-69.7885;-90;Bottom;LCD
+23;;;25.8007;-75.5444;-90;Bottom;TXT3
+24;;;9.29011;-66.2364;-90;Bottom;TXT3
+25;;;30.2118;-75.7399;-90;Bottom;TXT3
+26;;;4.07258;-66.2928;-90;Bottom;TXT3

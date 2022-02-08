@@ -1,7 +1,7 @@
 # Remote Air Quality Monitoring Module
 
 ## Introduction
-The purpose of this project is to design a modular Air Quality Monitoring Device fro controlled atmosphere environment (cleanroom) to measure, record and monitor real-time temperature, humidity, and other air quality measures such as CO2 and Volatile Organic Compounds (VOC). The system is based on I2C sensors and ESP32 micro-controller which connects to a local WIFI Network and transmit the measured data over MQTT protocol to a hosting database. Grafana is used for data visualization and real-time monitoring.
+The purpose of this project is to design a modular Air Quality Monitoring Device fro controlled atmosphere environment (cleanroom) to measure, record and monitor real-time temperature, humidity, and other air quality measures such as CO2 and Volatile Organic Compounds (VOC). The system is based on I2C sensors and ESP32 micro-controller which connects to a local WiFi Network and transmit the measured data over MQTT protocol to a hosting database. Grafana is used for data visualization and real-time monitoring.
 
 ## Required Hardwares
 - ESP32 Development Board
@@ -15,12 +15,16 @@ For a more practical application, I've designed a custom PCB to mount the micro-
 - two Connector Header Through Hole 4 position (2mm), like [this](https://www.digikey.ca/en/products/detail/sullins-connector-solutions/SWR201-NRTN-S04-SA-WH/2769602) one.
 
 
-## Software
+## Micro-controller Software
+The ESP32 micro-controller is programmed by Arduino IDE. The code is provided in ESP directory. The main dependencies are also provided. You can directly copy them to 'Arduino/libraries'. You may also need to install other standard libraries depending on your operating system.
 
+## Python bridge-script
+Once the data is transmitted to the server machine and you where able to subscribe to the corresponding MQTT channel successfully, a python script needs to be running in background, listening to the incoming MQTT messages, paring the messages and write the data to an [InfluxDB](https://www.influxdata.com/get-influxdb/) database. The bridge script is provided in 'bridge_script' directory. Please check it carefully and modify it based on your database configs.
 
+This script needs to be running 24/7 in background. In order to make sure any system restart or power outage won't affect the data-flow, I've created docker container with auto restart option and run the script in the container.
 
+## Data visualization
+You can setup a [Grafana](https://grafana.com) interface and link the InfluxDB as a data source to have a nice real-time monitoring system. There are many features that you may get interested in to implement in Grafana, such as setting Alerts, i.e., you can create a Discord channel and link it to Grafana to receive the alerts and notify the subscribed users when a specified condition happen.
 
-
-
-
-## 3D box
+## 3D box design
+You can 3D-print a box to accommodate the components. An stl file is provided in 'Box_3Ddesign' directory. Feel free to design a better looking box if you did not like this one.
