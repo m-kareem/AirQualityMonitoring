@@ -1,0 +1,29 @@
+*Pick And Place List
+*Company=
+*Author=
+*eMail=
+*
+*Project=esp32_single
+*Date=10:39:52
+*CreatedBy=Fritzing 0.9.3b.04.19.5c895d327c44a3114e5fcc9d8260daf0cbb52806
+*
+*
+*Coordinates in mm, always center of component
+*Origin 0/0=Lower left corner of PCB
+*Rotation in degree (0-360, math. pos.)
+*
+*No;Value;Package;X;Y;Rotation;Side;Name
+1;;;4.10755;-3.19535;0;Bottom;Hole2
+2;;;18.1637;-26.7141;-90;Bottom;TXT4
+3;;;18.6392;-64.5082;-90;Bottom;TXT3
+4;;;4.77121;-62.179;-90;Bottom;IMG1
+5;;;10.7698;-26.5763;-90;Bottom;TXT4
+6;;;14.7403;-26.6462;-90;Bottom;TXT4
+7;;;21.7795;-64.3693;-90;Bottom;TXT3
+8;;;29.3076;-72.5952;0;Bottom;Hole3
+9;;;3.30773;-72.5952;0;Bottom;Hole4
+10;;;17.1176;-64.9454;0;Bottom;SHT
+11;;;13.5507;-64.4819;-90;Bottom;TXT3
+12;;;28.1076;-3.19535;0;Bottom;Hole1
+13;;;16.1845;-27.0048;0;Bottom;ESP32
+14;;;15.8707;-64.4701;-90;Bottom;TXT3

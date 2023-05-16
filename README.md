@@ -9,6 +9,9 @@ The purpose of this project is to design a modular Remote Air Quality Monitoring
 - I2C VOC & ECO2 gas sensor (SGP30). I've used [this](https://media.digikey.com/pdf/Data%20Sheets/Seeed%20Technology/101020512_Web.pdf) sensor by Seeed.
 - A 1602 LCD Display Screen with I2C module interface adapter. This is optional but nice to have to display the real-time measurements on the devise.
 
+* A more elegent option would be to use LilyGo T-Display-S3 module which has a built-in LCD display. You can find more information about this module [here](https://github.com/Xinyuan-LilyGO/T-Display-S3)
+* An updated code with Over The Air firmware updating feature is provided in 'T-Display-S3' directory. You can use this code to program the T-Display-S3 module. The code is based on PlatformIO IDE. You can use the provided platformio.ini file to configure your project. You may need to install other standard libraries depending on your operating system.
+
 ### Custom PCB design
 For a more practical application, I've made a custom designed PCB to mount the micro-controller and sensors. You can use the provided Gerber and Drill Files and order yours from any PCB manufacturer. I've used [JLCPCB](https://jlcpcb.com). Other parts you may need for this PCB are:
 - Two 15 Position Header Connector (2.54mm) Through Hole Tin, like [this](https://www.digikey.ca/en/products/detail/sullins-connector-solutions/PPTC151LFBN-RC/810153) one.
