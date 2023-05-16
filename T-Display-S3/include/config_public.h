@@ -12,8 +12,8 @@ const char *sensor_type="SHT35"; // SHT35, SGP30, or Multi
 #define device_pref "SC-" // Give the device a name!
 
 // for OTA drive
-#define firmware_version "v@1.0.1.9"
-#define ProductKey "5d0d1086-4c6b-4053-9932-5e7ff0b1acba"
+#define firmware_version "v@1.0.0.0s"
+#define ProductKey "YOUR_PRODUCT_KEY"
 #define update_timeTick 3600
 
 // I2C pins in lilygo T-Display-S3 board
