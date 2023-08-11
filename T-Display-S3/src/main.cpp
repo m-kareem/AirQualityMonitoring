@@ -68,7 +68,6 @@ TFT_eSPI    tft = TFT_eSPI();                                   // T-Display-S3 
 TFT_eSprite spriteBattery = TFT_eSprite(& tft);                 // Battery sprite.
 TFT_eSprite spriteIP = TFT_eSprite(& tft);                 // IP sprite.
 TFT_eSprite spriteNet = TFT_eSprite(& tft);                 // NET sprite.
-TFT_eSprite spriteLogo = TFT_eSprite(& tft);                 // Logo sprite.
 
 String      stringIP;                                           // IP address.
 String      macaddress;                                           // IP address.
@@ -111,8 +110,8 @@ void setupWifi() {
   
   WiFi.disconnect(true);
   delay(100);  // <- fixes some issues with WiFi stability
-  //WiFi.begin(ssid, password);
-  WiFi.begin(ssid, NULL);
+  WiFi.begin(ssid, password);
+  //WiFi.begin(ssid, NULL);
 }
 //---------------------------------------------------------------
 void setupEAP_Wifi() {
@@ -524,9 +523,11 @@ void I2C_scanner()
 }
 
 void welcome_screen(){
-  // logo
-  tft.fillScreen(TFT_BLACK); currentLine_y = 0;
-  tft.drawBitmap(0, currentLine_y, myBitmapLogo_York_University, DISPLAY_WIDTH, DISPLAY_HEIGHT, TFT_WHITE);
+  // YU logo
+  tft.setSwapBytes(true);
+  tft.fillScreen(TFT_WHITE); currentLine_y = 0;
+  tft.pushImage(0,0,DISPLAY_WIDTH, 146,YU_logo);
+  
   delay(3000);
 
   // wipe screen
@@ -620,12 +621,12 @@ void setup() {
   // Serial.
   Serial.begin(115200);
   delay(100);
-  
+  /*
   // Register your firmware info to the library
   OTADRIVE.setInfo(String(ProductKey), String(firmware_version));
   // Register your update progrees handler
   OTADRIVE.onUpdateFirmwareProgress(ota_proggress);
-  
+  */
   Wire.begin(SDAPIN, SCLPIN); // SDA, SCL
 
   // Analog.
@@ -650,10 +651,6 @@ void setup() {
   // IP Sprite.
   spriteIP.createSprite(SPRITE_IP_WIDTH, SPRITE_IP_HEIGHT);
   spriteIP.setSwapBytes(true);
-    
-  // Logo sprite.
-  spriteLogo.createSprite(40, 40);
-  spriteLogo.setSwapBytes(true);
 
   welcome_screen();
   
@@ -745,65 +742,65 @@ void loop() {
   else ledcWrite(0, DISPLAY_BRIGHTNESS_OFF);    
        
     
-    if(WiFi.status() != WL_CONNECTED){
-      ledcWrite(0, DISPLAY_BRIGHTNESS_MAX);
-      tft.fillScreen(TFT_BLACK);
-      tft.drawString("Retry " + String(counter) + ": connecting to network:",0,0, 2);
+  if(WiFi.status() != WL_CONNECTED){
+    ledcWrite(0, DISPLAY_BRIGHTNESS_MAX);
+    tft.fillScreen(TFT_BLACK);
+    tft.drawString("Retry " + String(counter) + ": connecting to network:",0,0, 2);
       
-      setupNetwork();
+    setupNetwork();
 
-      if (millis() - last_activity_time > WIFI_TIMEOUT ) // Check wifi timeout
-        ESP.restart();
-    }
-    else{
-      // -- OTA finctionality
-      if (OTADRIVE.timeTick(update_timeTick))
-      {
-        updateConfigs();
-        ///*
-        auto inf = OTADRIVE.updateFirmwareInfo();
-        if (inf.available)
-        {
-          ledcWrite(0, DISPLAY_BRIGHTNESS_MAX);
-          tft.fillScreen(TFT_BLACK);
-          tft.setCursor(1, 1);
-          tft.printf("Downloading new firmware: v%s", inf.version.c_str());
-          OTADRIVE.updateFirmware();
-          delay(2000);
-          tft.fillScreen(TFT_BLACK);
-        }
-        //*/
-      }
+    if (millis() - last_activity_time > WIFI_TIMEOUT ) // Check wifi timeout
+      ESP.restart();
+  }
+  else{
+   // -- OTA finctionality
+    if (OTADRIVE.timeTick(update_timeTick))
+    {
+      updateConfigs();
       ///*
-      char buffer[16];
-      itoa(_device_number, buffer, 10);
-      const char* char_helper = buffer;
-      // first wipe the chars 
-      memset(device_name, 0, 100);
-      memset(MQTT_TOPIC_STATE, 0, 100);
-      memset(MQTT_TOPIC_CO2VOC, 0, 100);
-      memset(MQTT_TOPIC_TRH, 0, 100);
-      memset(MQTT_TOPIC_AIRQUALITY, 0, 100);
-      
-      strcat(device_name, device_pref); strcat(device_name, char_helper);
-      strcat(MQTT_TOPIC_STATE, device_location); strcat(MQTT_TOPIC_STATE, "/"); strcat(MQTT_TOPIC_STATE, device_name); strcat(MQTT_TOPIC_STATE, "/status");
-      strcat(MQTT_TOPIC_CO2VOC, device_location); strcat(MQTT_TOPIC_CO2VOC, "/"); strcat(MQTT_TOPIC_CO2VOC, device_name); strcat(MQTT_TOPIC_CO2VOC, "/measurements/CO2VOC");
-      strcat(MQTT_TOPIC_TRH, device_location); strcat(MQTT_TOPIC_TRH, "/"); strcat(MQTT_TOPIC_TRH, device_name); strcat(MQTT_TOPIC_TRH, "/measurements/TrH");
-      strcat(MQTT_TOPIC_AIRQUALITY, device_location); strcat(MQTT_TOPIC_AIRQUALITY, "/"); strcat(MQTT_TOPIC_AIRQUALITY, device_name); strcat(MQTT_TOPIC_AIRQUALITY, "/measurements/AQ");
-      //*/
-      if (!mqttClient.connected()){
-        mqttReconnect();
+      auto inf = OTADRIVE.updateFirmwareInfo();
+      if (inf.available)
+      {
+        ledcWrite(0, DISPLAY_BRIGHTNESS_MAX);
+        tft.fillScreen(TFT_BLACK);
+        tft.setCursor(1, 1);
+        tft.printf("Downloading new firmware: v%s", inf.version.c_str());
+        OTADRIVE.updateFirmware();
+        delay(2000);
+        tft.fillScreen(TFT_BLACK);
       }
+        //*/
+    }
+    ///*
+    char buffer[16];
+    itoa(_device_number, buffer, 10);
+    const char* char_helper = buffer;
+    // first wipe the chars 
+    memset(device_name, 0, 100);
+    memset(MQTT_TOPIC_STATE, 0, 100);
+    memset(MQTT_TOPIC_CO2VOC, 0, 100);
+    memset(MQTT_TOPIC_TRH, 0, 100);
+    memset(MQTT_TOPIC_AIRQUALITY, 0, 100);
       
-      if(sensor_type=="SHT35") mqtt_jason_publish(MQTT_TOPIC_TRH, "TrH", TrH_list, 2);
-      else if(sensor_type=="SGP30") mqtt_jason_publish(MQTT_TOPIC_CO2VOC, "CO2VOC", CO2VOC_list, 2);
-      else if(sensor_type=="Multi") mqtt_jason_publish(MQTT_TOPIC_AIRQUALITY, "CO2VOC", AirQuality_list, 4);
+    strcat(device_name, device_pref); strcat(device_name, char_helper);
+    strcat(MQTT_TOPIC_STATE, device_location); strcat(MQTT_TOPIC_STATE, "/"); strcat(MQTT_TOPIC_STATE, device_name); strcat(MQTT_TOPIC_STATE, "/status");
+    strcat(MQTT_TOPIC_CO2VOC, device_location); strcat(MQTT_TOPIC_CO2VOC, "/"); strcat(MQTT_TOPIC_CO2VOC, device_name); strcat(MQTT_TOPIC_CO2VOC, "/measurements/CO2VOC");
+    strcat(MQTT_TOPIC_TRH, device_location); strcat(MQTT_TOPIC_TRH, "/"); strcat(MQTT_TOPIC_TRH, device_name); strcat(MQTT_TOPIC_TRH, "/measurements/TrH");
+    strcat(MQTT_TOPIC_AIRQUALITY, device_location); strcat(MQTT_TOPIC_AIRQUALITY, "/"); strcat(MQTT_TOPIC_AIRQUALITY, device_name); strcat(MQTT_TOPIC_AIRQUALITY, "/measurements/AQ");
+    //*/
+    if (!mqttClient.connected()){
+      mqttReconnect();
+    }
+      
+    if(sensor_type=="SHT35") mqtt_jason_publish(MQTT_TOPIC_TRH, "TrH", TrH_list, 2);
+    else if(sensor_type=="SGP30") mqtt_jason_publish(MQTT_TOPIC_CO2VOC, "CO2VOC", CO2VOC_list, 2);
+    else if(sensor_type=="Multi") mqtt_jason_publish(MQTT_TOPIC_AIRQUALITY, "CO2VOC", AirQuality_list, 4);
         
-      mqttClient.loop();
+    mqttClient.loop();
     
-      Serial.println("-------------");
-   }
-    if(sensor_type!="SHT35") store_baseline();
+    Serial.println("-------------");
+  }
+  if(sensor_type!="SHT35") store_baseline();
     
-    delay(_MQTT_PUBLISH_DELAY_ms);
+  delay(_MQTT_PUBLISH_DELAY_ms);
 }

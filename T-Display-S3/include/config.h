@@ -26,7 +26,7 @@ const char *sensor_type="SHT35"; // SHT35, SGP30, or Multi
 
 //----------------- OTA config variables
 //int _update_timeTick = 900;
-int _device_number = 99;
+int _device_number = 88;
 int _power_saving = 0;
 int _MQTT_PUBLISH_DELAY_ms = 5000;
 
@@ -41,8 +41,10 @@ const bool EAP_wifi= false; // change according to the WIFI type [true for enter
 const char* EAP_ssid = "AirYorkPLUS"; //  network's SSID
 
 //------ non-ENT Wifi setting-------------------
-const char *ssid = "AirYorkGUEST";
+//const char *ssid = "AirYorkGUEST";
 //const char *password = none;
+const char *ssid = "Rogers_504";
+const char *password = "Welcome#8485";
 
 // ============ MQTT setting =======================================
 const char *MQTT_SERVER = "petra.phys.yorku.ca";
