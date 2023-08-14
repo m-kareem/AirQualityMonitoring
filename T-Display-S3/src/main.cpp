@@ -1,7 +1,8 @@
 #include <Arduino.h>
 #include <EEPROM.h>
+
+#include "SHTSensor.h" // sensirion/arduino-sht bySensirion AG
 #include "sgp30.h" // for CO2 sensor
-#include "Seeed_SHT35.h" // for temperature / humidity SHT sensor
 
 #include "esp_wpa2.h" //wpa2 library for connections to Enterprise networks
 #include <ArduinoJson.h>
@@ -41,8 +42,6 @@
 #define     SPRITE_HEADER_FONT     2                           // HEADER sprite font size.
 #define     SPRITE_HEADER_HEIGHT   30                          // HEADER sprite height in pixels.
 #define     SPRITE_HEADER_WIDTH    DISPLAY_WIDTH               // HEADER sprite width in pixels.
-
-#define     SPRITE_MAC_FONT     3                           // MacaAdress font size.
 
 #define darkred 0xA041
 
@@ -103,31 +102,27 @@ char MQTT_TOPIC_AIRQUALITY[100]= "";
 char device_name[100]= "";
 
 //------------- objects --------------------
-SHT35 sensor(SCLPIN);
+SHTSensor sht;
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
+
 
 void ota_proggress(size_t downloaded, size_t total);
 
 //================== Functions ==============================
 void setupWifi() {
-  currentLine_y = currentLine_y + 16;
   Serial.print("Connecting to network: ");
   Serial.println(ssid);
-  
-  spriteNet.drawString("Connecting to network: " +String(ssid) , 0, currentLine_y, 2);
   
   WiFi.disconnect(true);
   delay(100);  // <- fixes some issues with WiFi stability
   WiFi.begin(ssid, password);
-  //WiFi.begin(ssid, NULL);
 }
 //---------------------------------------------------------------
-void setupEAP_Wifi() {
+void setupEAP_Wifi() {  
+  Serial.print("Connecting to EAP network: ");
+  Serial.println(EAP_ssid);
 
-  currentLine_y = currentLine_y + 16;
-  spriteNet.drawString("Connecting to EAP network: " +String(EAP_ssid) , 0, currentLine_y, 2);
-  spriteNet.pushSprite(0,0);
   WiFi.disconnect(true);
   delay(100);  // <- fixes some issues with WiFi stability
   WiFi.mode(WIFI_STA); //init wifi mode
@@ -135,18 +130,24 @@ void setupEAP_Wifi() {
 }
 //---------------------------------------------------------------
 void setupNetwork() {
-  spriteNet.createSprite(DISPLAY_WIDTH, DISPLAY_HEIGHT);
-  spriteNet.drawString("Awaiting wifi connection ...", 0, currentLine_y, 2);
+  currentLine_y = 0;
+  spriteNet.drawString("MAC Address: " + WiFi.macAddress(), 5, currentLine_y, 2);
   Serial.print("MAC Address: ");
   Serial.println(WiFi.macAddress());
-   
+  
+  currentLine_y += 16;
+  spriteNet.drawString("Awaiting wifi connection ...", 5, currentLine_y, 2);
+  
+  currentLine_y += 16;
   if (EAP_wifi){
-   setupEAP_Wifi();
+    spriteNet.drawString("Connecting to EAP network: " +String(EAP_ssid) , 5, currentLine_y, 2);
+    setupEAP_Wifi();
   }
   else{
+    spriteNet.drawString("Connecting to network: " +String(ssid) , 5, currentLine_y, 2);
     setupWifi();
   }
-  
+
   last_activity_time = millis(); // Update last activity time
   // Wait for a connection.
     while (WiFi.status() != WL_CONNECTED)
@@ -169,15 +170,11 @@ void setupNetwork() {
     
     stringIP = WiFi.localIP().toString();
     
-    currentLine_y = currentLine_y + 16;
+    currentLine_y += 16;
     if(do_ota)
-      spriteNet.drawString("Wifi connected: " + stringIP +",  OTA enabled.", 0, currentLine_y, 2);
+      spriteNet.drawString("Wifi connected: " + stringIP +",  OTA enabled.", 5, currentLine_y, 2);
     else
-      spriteNet.drawString("Wifi connected: " + stringIP +",  OTA disabled.", 0, currentLine_y, 2);
-
-
-    currentLine_y = currentLine_y + 20;
-    spriteNet.drawString("MAC Address: " + String(WiFi.macAddress()), 0, currentLine_y, SPRITE_MAC_FONT);
+      spriteNet.drawString("Wifi connected: " + stringIP +",  OTA disabled.", 5, currentLine_y, 2);
 
     spriteNet.pushSprite(0,0);
 }
@@ -209,13 +206,12 @@ void mqttReconnect() {
       delay(5000);
       if (counter2>=20)//after 20 iteration timeout - reset board
         ESP.restart();
-
     }
   }
 }
 
 //---------------------------------------------------------------
-// ArduinoJson 5
+// works only with ArduinoJson 5
 void mqtt_jason_publish(String topic, String dataType, float mylist[], int list_size )
 {
   StaticJsonBuffer<300> JSONbuffer;
@@ -265,15 +261,16 @@ void ReadSystem(){
           Serial.println("error reading IAQ values\n");
         }
     }
-    else if(sensor_type=="SHT35"){
-      if(NO_ERROR==sensor.read_meas_data_single_shot(HIGH_REP_WITH_STRCH, &temp, &hum)){
-        T_list=round(temp*10)/10;
-        rH_list=round(hum*10)/10;
+    else if(sensor_type=="SHT_xx"){
+      if (sht.readSample()) {
+        T_list=round(sht.getTemperature()*10)/10;
+        rH_list=round(sht.getHumidity()*10)/10;
         TrH_list[0]=T_list;
         TrH_list[1]=rH_list;
       }
-      else{T_list= invalidData; rH_list= invalidData; TrH_list[0]=invalidData; TrH_list[1]=invalidData;}
-      
+      else{T_list= invalidData; rH_list= invalidData; TrH_list[0]=invalidData; TrH_list[1]=invalidData;
+        Serial.print("sht_xx: Error in readSample()\n");
+      }  
     }
     else if(sensor_type=="Multi"){
       err = sgp_measure_iaq_blocking_read(&_tvoc_ppb, &_co2_eq_ppm);
@@ -289,16 +286,21 @@ void ReadSystem(){
           Serial.println("error reading IAQ values\n");
         }
         
-        if(NO_ERROR==sensor.read_meas_data_single_shot(HIGH_REP_WITH_STRCH, &temp, &hum)){
-        T_list=round(temp*10)/10;
-        rH_list=round(hum*10)/10;
-      }
-      else{T_list= invalidData; rH_list= invalidData; TrH_list[0]=invalidData; TrH_list[1]=invalidData;}
+        if (sht.readSample()) {
+          T_list=round(sht.getTemperature()*10)/10;
+          rH_list=round(sht.getHumidity()*10)/10;
+          TrH_list[0]=T_list;
+          TrH_list[1]=rH_list;
+        }
+        else{
+          T_list= invalidData; rH_list= invalidData; TrH_list[0]=invalidData; TrH_list[1]=invalidData;
+          Serial.print("sht_xx: Error in readSample()\n");
+        } 
       
-      AirQuality_list[0]=T_list;
-      AirQuality_list[1]=rH_list;
-      AirQuality_list[2]=CO2_list;
-      AirQuality_list[3]=VOC_list; 
+        AirQuality_list[0]=T_list;
+        AirQuality_list[1]=rH_list;
+        AirQuality_list[2]=CO2_list;
+        AirQuality_list[3]=VOC_list; 
     }
 
     else{
@@ -322,7 +324,7 @@ void PrintResults(){
 
 //---------------------------------------------
 void PrintResults_TFT(){
-  if (sensor_type=="SHT35"){
+  if (sensor_type=="SHT_xx"){
       tft.setTextColor(TFT_MAGENTA, TFT_BLACK);
       tft.drawString("Temperature(C): "+ String(T_list,1) , 20, 71, 4);
       tft.setTextColor(TFT_CYAN, TFT_BLACK);
@@ -406,15 +408,16 @@ void set_baseline(void) {
     Serial.println(baseline_value, HEX);
 }
 
+//--------------------------------------------------------
 void I2C_scanner()
 {
   byte error, address;
-  int nDevices;
-  currentLine_y = currentLine_y + 2*16;
-  tft.drawString("Scanning I2C ...", 0, currentLine_y, 2);
+  int nDevices = 0;
 
-  nDevices = 0;
-  currentLine_y = currentLine_y + 16;
+  currentLine_y += 2*16;
+  tft.drawString("Scanning I2C ...", 5, currentLine_y, 2);
+
+  currentLine_y += 16;
   int y_offset = 1;
   
   for(address = 1; address < 127; address++ ) 
@@ -430,37 +433,37 @@ void I2C_scanner()
       Serial.print("I2C device found at address 0x");
       if (address<16){
         Serial.print("0");
-        tft.drawString("I2C device found at address 0x0", 0, currentLine_y, 2);
+        tft.drawString("I2C device found at address 0x0", 5, currentLine_y, 2);
       } 
       Serial.print(address,HEX);
       Serial.println("  !");
       
       nDevices++;
       y_offset = (currentLine_y-16) + nDevices*16;
-      tft.drawString("I2C device found at address 0x"+String(address, HEX) + " !", 0, y_offset, 2);
+      tft.drawString("I2C device found at address 0x"+String(address, HEX) + " !", 5, y_offset, 2);
     }
     else if (error==4) 
     {
       Serial.print("Unknown error at address 0x");
       if (address<16) {
         Serial.print("0");
-        tft.drawString("Unknown error at address 0x0", 0, currentLine_y, 2);
+        tft.drawString("Unknown error at address 0x0", 5, currentLine_y, 2);
       }
       Serial.println(address,HEX);
-      tft.drawString("Unknown error at address 0x"+String(address, HEX), 0, currentLine_y, 2);
+      tft.drawString("Unknown error at address 0x"+String(address, HEX), 5, currentLine_y, 2);
     }    
   }
   if (nDevices == 0){
     Serial.println("No I2C devices found\n");
-    tft.drawString("No I2C devices found", 0, currentLine_y, 2);
+    tft.drawString("No I2C devices found", 5, currentLine_y, 2);
   } else
-    Serial.println("done\n");
+    Serial.println("Scan finished\n");
 }
 
 void welcome_screen(){
   // YU logo
   tft.setSwapBytes(true);
-  tft.fillScreen(TFT_WHITE); currentLine_y = 0;
+  tft.fillScreen(TFT_WHITE);
   tft.pushImage(0,0,DISPLAY_WIDTH, 146,YU_logo);
   
   delay(3000);
@@ -485,7 +488,7 @@ void welcome_screen(){
   tft.drawString("firmware: "+String(firmware_version), DISPLAY_WIDTH - 130, DISPLAY_HEIGHT - 20, 2);
 
   delay(5000);
-  tft.fillScreen(TFT_BLACK); currentLine_y = 0;
+  tft.fillScreen(TFT_BLACK);
 }
 
 void saveConfigs(){
@@ -519,7 +522,6 @@ void updateConfigs(){
  saveConfigs();
 }
 
-
 void loadConfigs(){
   // check configs initialized in eeprom or not
   if (EEPROM.readInt(0) != 0x4A)
@@ -546,6 +548,47 @@ void ota_proggress(size_t downloaded, size_t total)
   tft.setCursor(0, 20);
   tft.printf("%d/%d   %d%%", downloaded, total, percent);
   tft.fillRect(0, 56, percent * 2, 10, TFT_GREEN);
+}
+
+void MQTT_publish(){
+  char buffer[16];
+  itoa(_device_number, buffer, 10);
+  const char* char_helper = buffer;
+  // first wipe the chars 
+  memset(device_name, 0, 100);
+  memset(MQTT_TOPIC_STATE, 0, 100);
+  memset(MQTT_TOPIC_CO2VOC, 0, 100);
+  memset(MQTT_TOPIC_TRH, 0, 100);
+  memset(MQTT_TOPIC_AIRQUALITY, 0, 100);
+      
+  strcat(device_name, device_pref); strcat(device_name, char_helper);
+  strcat(MQTT_TOPIC_STATE, device_location); strcat(MQTT_TOPIC_STATE, "/"); strcat(MQTT_TOPIC_STATE, device_name); strcat(MQTT_TOPIC_STATE, "/status");
+  strcat(MQTT_TOPIC_CO2VOC, device_location); strcat(MQTT_TOPIC_CO2VOC, "/"); strcat(MQTT_TOPIC_CO2VOC, device_name); strcat(MQTT_TOPIC_CO2VOC, "/measurements/CO2VOC");
+  strcat(MQTT_TOPIC_TRH, device_location); strcat(MQTT_TOPIC_TRH, "/"); strcat(MQTT_TOPIC_TRH, device_name); strcat(MQTT_TOPIC_TRH, "/measurements/TrH");
+  strcat(MQTT_TOPIC_AIRQUALITY, device_location); strcat(MQTT_TOPIC_AIRQUALITY, "/"); strcat(MQTT_TOPIC_AIRQUALITY, device_name); strcat(MQTT_TOPIC_AIRQUALITY, "/measurements/AQ");
+    
+  if (!mqttClient.connected()){
+    mqttReconnect();
+  }
+      
+  if(sensor_type=="SHT_xx") mqtt_jason_publish(MQTT_TOPIC_TRH, "TrH", TrH_list, 2);
+  else if(sensor_type=="SGP30") mqtt_jason_publish(MQTT_TOPIC_CO2VOC, "CO2VOC", CO2VOC_list, 2);
+  else if(sensor_type=="Multi") mqtt_jason_publish(MQTT_TOPIC_AIRQUALITY, "CO2VOC", AirQuality_list, 4);
+        
+  mqttClient.loop();
+    
+  Serial.println("-------------");
+}
+
+String GetTime(){
+  while(
+    !timeClient.update()) {
+    timeClient.forceUpdate();
+  }
+  String formattedTime = timeClient.getFormattedTime();
+  int splitT = formattedTime.indexOf("T");
+  String curTime = formattedTime.substring(splitT+1, formattedTime.length()-1);
+  return curTime;
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -582,9 +625,12 @@ void setup() {
   pinMode(15, OUTPUT);
   digitalWrite(15, 1);
 
-  // Header Sprite.
+  // Creating Sprites
   spriteHeader.createSprite(SPRITE_HEADER_WIDTH, SPRITE_HEADER_HEIGHT);
   spriteHeader.setSwapBytes(true);
+
+  spriteNet.createSprite(DISPLAY_WIDTH, DISPLAY_HEIGHT);
+  spriteNet.setSwapBytes(true);
 
   welcome_screen();
   
@@ -599,6 +645,12 @@ void setup() {
   
   if(do_ota)
     loadConfigs();
+  
+  if (sht.init()) {
+      Serial.print("sht_xx: init(): success\n");
+  } else {
+      Serial.print("sht_xx: init(): failed\n");
+  }
     
   mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
   
@@ -609,7 +661,7 @@ void setup() {
   //all APIs measuring IAQ(Indoor air quality ) output will not change.Default value is 400(ppm) for co2,0(ppb) for tvoc
     
   // Read H2 and Ethanol signal in the way of blocking
-    if (sensor_type != "SHT35"){
+    if (sensor_type != "SHT_xx"){
       while (sgp_probe() != STATUS_OK) {
           Serial.println("SGP failed");
           while (1);
@@ -664,8 +716,9 @@ void loop() {
   
   ReadSystem();
 
-  tft.drawLine(0,36, DISPLAY_WIDTH, 36, TFT_RED);
   tft.drawLine(0,37, DISPLAY_WIDTH, 37, TFT_RED);
+  tft.drawLine(0,38, DISPLAY_WIDTH, 38, TFT_RED);
+  
   PrintResults_TFT();
   
   if (_power_saving==0) screen_on =true;
@@ -679,12 +732,11 @@ void loop() {
       screen_on = false; // Update screen state
   }
 
+  if(screen_on) ledcWrite(0, DISPLAY_BRIGHTNESS_MAX);
+  else ledcWrite(0, DISPLAY_BRIGHTNESS_OFF); 
+
   if(do_wifi)
   {
-    if(screen_on) ledcWrite(0, DISPLAY_BRIGHTNESS_MAX);
-    else ledcWrite(0, DISPLAY_BRIGHTNESS_OFF);    
-       
-   
     if(WiFi.status() != WL_CONNECTED){
       ledcWrite(0, DISPLAY_BRIGHTNESS_MAX);
       tft.fillScreen(TFT_BLACK);
@@ -696,76 +748,37 @@ void loop() {
         ESP.restart();
     }
     else{ // when wifi is connected
-      
-      while(!timeClient.update()) {
-        timeClient.forceUpdate();
-      }
-      formattedDate = timeClient.getFormattedDate();
-      Serial.println(formattedDate);
-      int splitT = formattedDate.indexOf("T");
-      dayStamp = formattedDate.substring(0, splitT);
-      timeStamp = formattedDate.substring(splitT+1, formattedDate.length()-1);
-      String current=timeStamp.substring(0,5);
-      if(current!=tt)
-      {  
-        spriteHeader.drawString(timeStamp.substring(0,5), DISPLAY_WIDTH -70, 0, SPRITE_HEADER_FONT);
-        tt=timeStamp.substring(0,5);
-      }
-      
+      timeStamp = GetTime();
+      spriteHeader.drawString(timeStamp.substring(0,5), DISPLAY_WIDTH -40, 0, SPRITE_HEADER_FONT);
    
       if (do_ota) //OTA finctionality
+      {
+        if (OTADRIVE.timeTick(update_timeTick))
         {
-          if (OTADRIVE.timeTick(update_timeTick))
-            {
-              updateConfigs();
+          updateConfigs();
       
-              auto inf = OTADRIVE.updateFirmwareInfo();
-              if (inf.available)
-                {
-                  ledcWrite(0, DISPLAY_BRIGHTNESS_MAX);
-                  tft.fillScreen(TFT_BLACK);
-                  tft.setCursor(1, 1);
-                  tft.printf("Downloading new firmware: v%s", inf.version.c_str());
-                  OTADRIVE.updateFirmware();
-                  delay(2000);
-                  tft.fillScreen(TFT_BLACK);
-                }
-            }
+          auto inf = OTADRIVE.updateFirmwareInfo();
+          if (inf.available)
+          {
+            ledcWrite(0, DISPLAY_BRIGHTNESS_MAX);
+            tft.fillScreen(TFT_BLACK);
+            tft.setCursor(1, 1);
+            tft.printf("Downloading new firmware: v%s", inf.version.c_str());
+            OTADRIVE.updateFirmware();
+            delay(2000);
+            tft.fillScreen(TFT_BLACK);
+          }
         }
-    
-      char buffer[16];
-      itoa(_device_number, buffer, 10);
-      const char* char_helper = buffer;
-      // first wipe the chars 
-      memset(device_name, 0, 100);
-      memset(MQTT_TOPIC_STATE, 0, 100);
-      memset(MQTT_TOPIC_CO2VOC, 0, 100);
-      memset(MQTT_TOPIC_TRH, 0, 100);
-      memset(MQTT_TOPIC_AIRQUALITY, 0, 100);
-      
-      strcat(device_name, device_pref); strcat(device_name, char_helper);
-      strcat(MQTT_TOPIC_STATE, device_location); strcat(MQTT_TOPIC_STATE, "/"); strcat(MQTT_TOPIC_STATE, device_name); strcat(MQTT_TOPIC_STATE, "/status");
-      strcat(MQTT_TOPIC_CO2VOC, device_location); strcat(MQTT_TOPIC_CO2VOC, "/"); strcat(MQTT_TOPIC_CO2VOC, device_name); strcat(MQTT_TOPIC_CO2VOC, "/measurements/CO2VOC");
-      strcat(MQTT_TOPIC_TRH, device_location); strcat(MQTT_TOPIC_TRH, "/"); strcat(MQTT_TOPIC_TRH, device_name); strcat(MQTT_TOPIC_TRH, "/measurements/TrH");
-      strcat(MQTT_TOPIC_AIRQUALITY, device_location); strcat(MQTT_TOPIC_AIRQUALITY, "/"); strcat(MQTT_TOPIC_AIRQUALITY, device_name); strcat(MQTT_TOPIC_AIRQUALITY, "/measurements/AQ");
-    
-      if (!mqttClient.connected()){
-        mqttReconnect();
       }
       
-      if(sensor_type=="SHT35") mqtt_jason_publish(MQTT_TOPIC_TRH, "TrH", TrH_list, 2);
-      else if(sensor_type=="SGP30") mqtt_jason_publish(MQTT_TOPIC_CO2VOC, "CO2VOC", CO2VOC_list, 2);
-      else if(sensor_type=="Multi") mqtt_jason_publish(MQTT_TOPIC_AIRQUALITY, "CO2VOC", AirQuality_list, 4);
-        
-      mqttClient.loop();
-    
-      Serial.println("-------------");
-    }
+      MQTT_publish();
+     
+    } // end of wifi connected
   } // end of do_wifi functionality
 
   spriteHeader.pushSprite(2, 5); // draw on coordinates 2,5
   
-  if(sensor_type!="SHT35") store_baseline();
+  if(sensor_type!="SHT_xx") store_baseline();
     
   delay(_MQTT_PUBLISH_DELAY_ms);
 }
