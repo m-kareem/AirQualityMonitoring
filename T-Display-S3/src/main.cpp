@@ -19,16 +19,18 @@
 #include "YU_logo.h" // image convertor: https://javl.github.io/image2cpp/
 #include "config.h" // Update this file with your configuration
 
-#define LOOP_TIME_INTERVAL_MS  2000
-#define BASELINE_IS_STORED_FLAG  (0X55)
+#include <NTPClient.h>
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // Global constants
 //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Display.
 
+#define LOOP_TIME_INTERVAL_MS  2000
+#define BASELINE_IS_STORED_FLAG  (0X55)
+
+// Display.
 #define     DISPLAY_HEIGHT          170                         // T-Display-S3 display height in pixels.
 #define     DISPLAY_WIDTH           320                         // T-Display-S3 display width in pixels.
 #define     DISPLAY_BRIGHTNESS_MAX  252                         // T-Display-S3 display brightness maximum.
@@ -36,16 +38,13 @@
 #define     TFT_BL                  38                          // T-Display-S3 backlight pin  
 
 // Sprites.
-
-#define     SPRITE_BATTERY_FONT     2                           // Battery sprite font size.
-#define     SPRITE_BATTERY_HEIGHT   15                          // Battery sprite height in pixels.
-#define     SPRITE_BATTERY_WIDTH    70                         // Battery sprite width in pixels.
-
-#define     SPRITE_IP_FONT     2                           // IP sprite font size.
-#define     SPRITE_IP_HEIGHT   30                          // IP sprite height in pixels.
-#define     SPRITE_IP_WIDTH    250                         // IP sprite width in pixels.
+#define     SPRITE_HEADER_FONT     2                           // HEADER sprite font size.
+#define     SPRITE_HEADER_HEIGHT   30                          // HEADER sprite height in pixels.
+#define     SPRITE_HEADER_WIDTH    DISPLAY_WIDTH               // HEADER sprite width in pixels.
 
 #define     SPRITE_MAC_FONT     3                           // MacaAdress font size.
+
+#define darkred 0xA041
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -65,8 +64,7 @@ TFT_eSPI    tft = TFT_eSPI();                                   // T-Display-S3 
 //int         lcdBacklighBrightness = DISPLAY_BRIGHTNESS_MAX;     // T-Display-S3 brightness.
 
 // Sprites.
-TFT_eSprite spriteBattery = TFT_eSprite(& tft);                 // Battery sprite.
-TFT_eSprite spriteIP = TFT_eSprite(& tft);                 // IP sprite.
+TFT_eSprite spriteHeader = TFT_eSprite(& tft);                 // header sprite.
 TFT_eSprite spriteNet = TFT_eSprite(& tft);                 // NET sprite.
 
 String      stringIP;                                           // IP address.
@@ -84,6 +82,17 @@ float TrH_list[2];
 float AirQuality_list[4];
 
 const float invalidData = -999;
+
+//--------------- time -------------------------
+// Define NTP Client to get time
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP);
+// Variables to save date and time
+String formattedDate;
+String dayStamp;
+String timeStamp;
+String tt="";
+String curSeconds="";
 
 //------------- MQTT topics --------------------
 char MQTT_TOPIC_STATE[100]= "";
@@ -161,11 +170,23 @@ void setupNetwork() {
     stringIP = WiFi.localIP().toString();
     
     currentLine_y = currentLine_y + 16;
-    spriteNet.drawString("Wifi connected: " + stringIP +",  OTA enabled.", 0, currentLine_y, 2);
+    if(do_ota)
+      spriteNet.drawString("Wifi connected: " + stringIP +",  OTA enabled.", 0, currentLine_y, 2);
+    else
+      spriteNet.drawString("Wifi connected: " + stringIP +",  OTA disabled.", 0, currentLine_y, 2);
+
+
     currentLine_y = currentLine_y + 20;
     spriteNet.drawString("MAC Address: " + String(WiFi.macAddress()), 0, currentLine_y, SPRITE_MAC_FONT);
 
     spriteNet.pushSprite(0,0);
+}
+//------------------------------
+void setupTime() {
+  // Init and get the time
+  timeClient.begin();
+  timeClient.setTimeOffset(-3600*4); // Eastern time zone
+  timeClient.update();
 }
 
 //------------------------------
@@ -246,8 +267,8 @@ void ReadSystem(){
     }
     else if(sensor_type=="SHT35"){
       if(NO_ERROR==sensor.read_meas_data_single_shot(HIGH_REP_WITH_STRCH, &temp, &hum)){
-        T_list=round(temp*100)/100;
-        rH_list=round(hum*100)/100;
+        T_list=round(temp*10)/10;
+        rH_list=round(hum*10)/10;
         TrH_list[0]=T_list;
         TrH_list[1]=rH_list;
       }
@@ -269,8 +290,8 @@ void ReadSystem(){
         }
         
         if(NO_ERROR==sensor.read_meas_data_single_shot(HIGH_REP_WITH_STRCH, &temp, &hum)){
-        T_list=round(temp*100)/100;
-        rH_list=round(hum*100)/100;
+        T_list=round(temp*10)/10;
+        rH_list=round(hum*10)/10;
       }
       else{T_list= invalidData; rH_list= invalidData; TrH_list[0]=invalidData; TrH_list[1]=invalidData;}
       
@@ -298,100 +319,14 @@ void PrintResults(){
     
     Serial.print("\n");
 }
-//----------------------------------------------
-/*
-void PrintResults_LCD(){
-    if(sensor_type=="SGP30"){
-      Serial.print("CO2(ppm): ");
-      lcd.setCursor(0, 0);
-      lcd.print("CO2(ppm): ");
-    
-      for (int i = 0; i < n_chan; i++){
-        Serial.printf("%4.1f,  ",CO2_list[i]);
-        lcd.setCursor(11, 0);
-        if(CO2_list[i]==invalidData){lcd.printf("n.a");}
-        else{lcd.printf("%4.0f  ",CO2_list[i]);}
-        
-      }
-      Serial.print("\n");
 
-      Serial.print("VOC(ppb): ");
-      lcd.setCursor(0, 1);
-      lcd.print("VOC(ppb): ");
-      for (int i = 0; i < n_chan; i++){
-        //if(T_list[i]== invalidData)
-        // Serial.printf("%s,  ","none");
-      //else
-        Serial.printf("%4.1f,  ",VOC_list[i]);
-        lcd.setCursor(11, 1);
-        lcd.printf("%4.0f  ",VOC_list[i]);
-      }
-      
-    }
-    else if (sensor_type=="SHT35"){
-      Serial.print("Humidity(%RH): ");
-      lcd.setCursor(0, 1);
-      lcd.print("rH:");
-      for (int i = 0; i < n_chan; i++){
-        Serial.printf("%4.1f,  ",rH_list[i]);
-        lcd.setCursor(2, 1);
-        lcd.printf("%4.0f  ",rH_list[i]);
-      }
-      Serial.print("Temperature(C): ");
-      lcd.setCursor(7, 1);
-      lcd.print("-T(C): ");
-      for (int i = 0; i < n_chan; i++){
-        Serial.printf("%4.1f,  ",T_list[i]);
-        lcd.setCursor(12, 1);
-        lcd.printf("%4.0f  ",T_list[i]);
-      }
-    }
-    else if (sensor_type=="Multi"){
-      Serial.print("CO2(ppm):");
-      lcd.setCursor(0, 0);
-      lcd.print("CO2(ppm): ");
-    
-      for (int i = 0; i < n_chan; i++){
-        Serial.printf("%4.1f,  ",CO2_list[i]);
-        if(CO2_list[i]==invalidData){lcd.setCursor(13, 0); lcd.printf("N.A");}
-        else{lcd.setCursor(12, 0); lcd.printf("%4.0f  ",CO2_list[i]);}
-      }
-      Serial.print("\n");
-
-      Serial.print("VOC(ppb): ");
-      
-      for (int i = 0; i < n_chan; i++){
-        Serial.printf("%4.1f,  ",VOC_list[i]);
-    }
-    Serial.print("Humidity(%RH): ");
-      lcd.setCursor(0, 1);
-      lcd.print("H%:");
-      for (int i = 0; i < n_chan; i++){
-        Serial.printf("%4.1f,  ",rH_list[i]);
-        lcd.setCursor(2, 1);
-        if(rH_list[i]==invalidData){lcd.setCursor(3, 1); lcd.printf("N.A");}
-        else{lcd.printf("%4.0f  ",rH_list[i]);}
-      }
-      Serial.print("Temperature(C): ");
-      lcd.setCursor(7, 1);
-      lcd.print(",T(C): ");
-      for (int i = 0; i < n_chan; i++){
-        Serial.printf("%4.1f,  ",T_list[i]);
-        lcd.setCursor(12, 1);
-        if(T_list[i]==invalidData){lcd.setCursor(13, 1); lcd.printf("N.A");}
-        else{lcd.printf("%4.0f  ",T_list[i]);}
-      }
-    }
-    Serial.print("\n");
-}
-*/
 //---------------------------------------------
 void PrintResults_TFT(){
   if (sensor_type=="SHT35"){
       tft.setTextColor(TFT_MAGENTA, TFT_BLACK);
-      tft.drawString("Temperature(C): "+ String(T_list) , 20, 71, 4);
+      tft.drawString("Temperature(C): "+ String(T_list,1) , 20, 71, 4);
       tft.setTextColor(TFT_CYAN, TFT_BLACK);
-      tft.drawString("Humidity(%rH): "+ String(rH_list) , 20, 111, 4);
+      tft.drawString("Humidity(%rH): "+ String(rH_list,1) , 20, 111, 4);
     }
 }
 
@@ -621,12 +556,15 @@ void setup() {
   // Serial.
   Serial.begin(115200);
   delay(100);
-  /*
-  // Register your firmware info to the library
-  OTADRIVE.setInfo(String(ProductKey), String(firmware_version));
-  // Register your update progrees handler
-  OTADRIVE.onUpdateFirmwareProgress(ota_proggress);
-  */
+  
+  if (do_ota) //OTA finctionality
+  {
+    // Register your firmware info to the library
+    OTADRIVE.setInfo(String(ProductKey), String(firmware_version));
+    // Register your update progrees handler
+    OTADRIVE.onUpdateFirmwareProgress(ota_proggress);
+  }
+  
   Wire.begin(SDAPIN, SCLPIN); // SDA, SCL
 
   // Analog.
@@ -644,23 +582,23 @@ void setup() {
   pinMode(15, OUTPUT);
   digitalWrite(15, 1);
 
-  // Battery Sprite.
-  spriteBattery.createSprite(SPRITE_BATTERY_WIDTH, SPRITE_BATTERY_HEIGHT);
-  spriteBattery.setSwapBytes(true);
-
-  // IP Sprite.
-  spriteIP.createSprite(SPRITE_IP_WIDTH, SPRITE_IP_HEIGHT);
-  spriteIP.setSwapBytes(true);
+  // Header Sprite.
+  spriteHeader.createSprite(SPRITE_HEADER_WIDTH, SPRITE_HEADER_HEIGHT);
+  spriteHeader.setSwapBytes(true);
 
   welcome_screen();
   
-  setupNetwork();
+  if (do_wifi)
+  { setupNetwork();
+    setupTime();
+  }
   
   I2C_scanner();
 
   EEPROM.begin(32);
   
-  loadConfigs();
+  if(do_ota)
+    loadConfigs();
     
   mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
   
@@ -702,26 +640,30 @@ void setup() {
 void loop() {
   // Read the battery voltage.  
   uVolt = (analogRead(4) * 2 * 3.3 * 1000) / 4096;
-    
-  // Upeate the battery sprite.
-  spriteBattery.fillRect(0, 0, SPRITE_BATTERY_WIDTH, SPRITE_BATTERY_HEIGHT, TFT_BLACK);
-  spriteBattery.drawString(String(uVolt / 1000) + "." + String(uVolt % 1000) + " vDC", 0, 0, SPRITE_BATTERY_FONT);
-    
-  // Update the ip sprite
-  spriteIP.fillRect(0 , 0, SPRITE_IP_WIDTH, SPRITE_IP_HEIGHT, TFT_BLACK);
-  spriteIP.setTextColor(TFT_YELLOW, TFT_BLACK);
-  if(EAP_wifi)
-    {spriteIP.drawString(String(EAP_ssid), 2, 0, SPRITE_IP_FONT);}
-  else
-    {spriteIP.drawString(String(ssid), 2, 0, SPRITE_IP_FONT);}
-    
-  spriteIP.drawString("IP: "+ stringIP, 100, 0, SPRITE_IP_FONT);
-  spriteIP.drawString("Device: "+ String(device_name), 2, 16, SPRITE_IP_FONT);
 
+  // Update the Header sprite
+  spriteHeader.fillRect(0 , 0, SPRITE_HEADER_WIDTH, SPRITE_HEADER_HEIGHT, TFT_BLACK);
+  spriteHeader.setTextColor(TFT_YELLOW, TFT_BLACK);
+
+  spriteHeader.drawString(String(uVolt / 1000) + "." + String(uVolt % 1000) + " vDC", DISPLAY_WIDTH -70, 16, SPRITE_HEADER_FONT);
+  
+  if(do_wifi)
+  {
+    if(EAP_wifi)
+      spriteHeader.drawString(String(EAP_ssid), 0, 0, SPRITE_HEADER_FONT);
+    else
+      spriteHeader.drawString(String(ssid), 0, 0, SPRITE_HEADER_FONT);
+    
+    spriteHeader.drawString("IP: "+ stringIP, 100, 0, SPRITE_HEADER_FONT);
+    spriteHeader.drawString("Device: "+ String(device_name), 0, 16, SPRITE_HEADER_FONT);
+  }
+  else
+  {
+    spriteHeader.drawString("Wifi disabled", 0, 0, SPRITE_HEADER_FONT);
+  }
+  
   ReadSystem();
 
-  spriteIP.pushSprite(2, 5); // draw on coordinates 0,0
-  spriteBattery.pushSprite(DISPLAY_WIDTH - 70, 5); // draw on coordinates 0,0
   tft.drawLine(0,36, DISPLAY_WIDTH, 36, TFT_RED);
   tft.drawLine(0,37, DISPLAY_WIDTH, 37, TFT_RED);
   PrintResults_TFT();
@@ -737,69 +679,92 @@ void loop() {
       screen_on = false; // Update screen state
   }
 
-  
-  if(screen_on) ledcWrite(0, DISPLAY_BRIGHTNESS_MAX);
-  else ledcWrite(0, DISPLAY_BRIGHTNESS_OFF);    
+  if(do_wifi)
+  {
+    if(screen_on) ledcWrite(0, DISPLAY_BRIGHTNESS_MAX);
+    else ledcWrite(0, DISPLAY_BRIGHTNESS_OFF);    
        
-    
-  if(WiFi.status() != WL_CONNECTED){
-    ledcWrite(0, DISPLAY_BRIGHTNESS_MAX);
-    tft.fillScreen(TFT_BLACK);
-    tft.drawString("Retry " + String(counter) + ": connecting to network:",0,0, 2);
+   
+    if(WiFi.status() != WL_CONNECTED){
+      ledcWrite(0, DISPLAY_BRIGHTNESS_MAX);
+      tft.fillScreen(TFT_BLACK);
+      tft.drawString("Retry " + String(counter) + ": connecting to network:",0,0, 2);
       
-    setupNetwork();
+      setupNetwork();
 
-    if (millis() - last_activity_time > WIFI_TIMEOUT ) // Check wifi timeout
-      ESP.restart();
-  }
-  else{
-   // -- OTA finctionality
-    if (OTADRIVE.timeTick(update_timeTick))
-    {
-      updateConfigs();
-      ///*
-      auto inf = OTADRIVE.updateFirmwareInfo();
-      if (inf.available)
-      {
-        ledcWrite(0, DISPLAY_BRIGHTNESS_MAX);
-        tft.fillScreen(TFT_BLACK);
-        tft.setCursor(1, 1);
-        tft.printf("Downloading new firmware: v%s", inf.version.c_str());
-        OTADRIVE.updateFirmware();
-        delay(2000);
-        tft.fillScreen(TFT_BLACK);
+      if (millis() - last_activity_time > WIFI_TIMEOUT ) // Check wifi timeout
+        ESP.restart();
+    }
+    else{ // when wifi is connected
+      
+      while(!timeClient.update()) {
+        timeClient.forceUpdate();
       }
-        //*/
-    }
-    ///*
-    char buffer[16];
-    itoa(_device_number, buffer, 10);
-    const char* char_helper = buffer;
-    // first wipe the chars 
-    memset(device_name, 0, 100);
-    memset(MQTT_TOPIC_STATE, 0, 100);
-    memset(MQTT_TOPIC_CO2VOC, 0, 100);
-    memset(MQTT_TOPIC_TRH, 0, 100);
-    memset(MQTT_TOPIC_AIRQUALITY, 0, 100);
+      formattedDate = timeClient.getFormattedDate();
+      Serial.println(formattedDate);
+      int splitT = formattedDate.indexOf("T");
+      dayStamp = formattedDate.substring(0, splitT);
+      timeStamp = formattedDate.substring(splitT+1, formattedDate.length()-1);
+      String current=timeStamp.substring(0,5);
+      if(current!=tt)
+      {  
+        spriteHeader.drawString(timeStamp.substring(0,5), DISPLAY_WIDTH -70, 0, SPRITE_HEADER_FONT);
+        tt=timeStamp.substring(0,5);
+      }
       
-    strcat(device_name, device_pref); strcat(device_name, char_helper);
-    strcat(MQTT_TOPIC_STATE, device_location); strcat(MQTT_TOPIC_STATE, "/"); strcat(MQTT_TOPIC_STATE, device_name); strcat(MQTT_TOPIC_STATE, "/status");
-    strcat(MQTT_TOPIC_CO2VOC, device_location); strcat(MQTT_TOPIC_CO2VOC, "/"); strcat(MQTT_TOPIC_CO2VOC, device_name); strcat(MQTT_TOPIC_CO2VOC, "/measurements/CO2VOC");
-    strcat(MQTT_TOPIC_TRH, device_location); strcat(MQTT_TOPIC_TRH, "/"); strcat(MQTT_TOPIC_TRH, device_name); strcat(MQTT_TOPIC_TRH, "/measurements/TrH");
-    strcat(MQTT_TOPIC_AIRQUALITY, device_location); strcat(MQTT_TOPIC_AIRQUALITY, "/"); strcat(MQTT_TOPIC_AIRQUALITY, device_name); strcat(MQTT_TOPIC_AIRQUALITY, "/measurements/AQ");
-    //*/
-    if (!mqttClient.connected()){
-      mqttReconnect();
-    }
+   
+      if (do_ota) //OTA finctionality
+        {
+          if (OTADRIVE.timeTick(update_timeTick))
+            {
+              updateConfigs();
       
-    if(sensor_type=="SHT35") mqtt_jason_publish(MQTT_TOPIC_TRH, "TrH", TrH_list, 2);
-    else if(sensor_type=="SGP30") mqtt_jason_publish(MQTT_TOPIC_CO2VOC, "CO2VOC", CO2VOC_list, 2);
-    else if(sensor_type=="Multi") mqtt_jason_publish(MQTT_TOPIC_AIRQUALITY, "CO2VOC", AirQuality_list, 4);
-        
-    mqttClient.loop();
+              auto inf = OTADRIVE.updateFirmwareInfo();
+              if (inf.available)
+                {
+                  ledcWrite(0, DISPLAY_BRIGHTNESS_MAX);
+                  tft.fillScreen(TFT_BLACK);
+                  tft.setCursor(1, 1);
+                  tft.printf("Downloading new firmware: v%s", inf.version.c_str());
+                  OTADRIVE.updateFirmware();
+                  delay(2000);
+                  tft.fillScreen(TFT_BLACK);
+                }
+            }
+        }
     
-    Serial.println("-------------");
-  }
+      char buffer[16];
+      itoa(_device_number, buffer, 10);
+      const char* char_helper = buffer;
+      // first wipe the chars 
+      memset(device_name, 0, 100);
+      memset(MQTT_TOPIC_STATE, 0, 100);
+      memset(MQTT_TOPIC_CO2VOC, 0, 100);
+      memset(MQTT_TOPIC_TRH, 0, 100);
+      memset(MQTT_TOPIC_AIRQUALITY, 0, 100);
+      
+      strcat(device_name, device_pref); strcat(device_name, char_helper);
+      strcat(MQTT_TOPIC_STATE, device_location); strcat(MQTT_TOPIC_STATE, "/"); strcat(MQTT_TOPIC_STATE, device_name); strcat(MQTT_TOPIC_STATE, "/status");
+      strcat(MQTT_TOPIC_CO2VOC, device_location); strcat(MQTT_TOPIC_CO2VOC, "/"); strcat(MQTT_TOPIC_CO2VOC, device_name); strcat(MQTT_TOPIC_CO2VOC, "/measurements/CO2VOC");
+      strcat(MQTT_TOPIC_TRH, device_location); strcat(MQTT_TOPIC_TRH, "/"); strcat(MQTT_TOPIC_TRH, device_name); strcat(MQTT_TOPIC_TRH, "/measurements/TrH");
+      strcat(MQTT_TOPIC_AIRQUALITY, device_location); strcat(MQTT_TOPIC_AIRQUALITY, "/"); strcat(MQTT_TOPIC_AIRQUALITY, device_name); strcat(MQTT_TOPIC_AIRQUALITY, "/measurements/AQ");
+    
+      if (!mqttClient.connected()){
+        mqttReconnect();
+      }
+      
+      if(sensor_type=="SHT35") mqtt_jason_publish(MQTT_TOPIC_TRH, "TrH", TrH_list, 2);
+      else if(sensor_type=="SGP30") mqtt_jason_publish(MQTT_TOPIC_CO2VOC, "CO2VOC", CO2VOC_list, 2);
+      else if(sensor_type=="Multi") mqtt_jason_publish(MQTT_TOPIC_AIRQUALITY, "CO2VOC", AirQuality_list, 4);
+        
+      mqttClient.loop();
+    
+      Serial.println("-------------");
+    }
+  } // end of do_wifi functionality
+
+  spriteHeader.pushSprite(2, 5); // draw on coordinates 2,5
+  
   if(sensor_type!="SHT35") store_baseline();
     
   delay(_MQTT_PUBLISH_DELAY_ms);
