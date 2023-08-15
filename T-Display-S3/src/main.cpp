@@ -2,6 +2,7 @@
 #include <EEPROM.h>
 
 #include "SHTSensor.h" // sensirion/arduino-sht bySensirion AG
+#include "Adafruit_seesaw.h" // Adafruit seesaw Library by Adafruit Industries
 #include "sgp30.h" // for CO2 sensor
 
 #include "esp_wpa2.h" //wpa2 library for connections to Enterprise networks
@@ -20,7 +21,7 @@
 #include "YU_logo.h" // image convertor: https://javl.github.io/image2cpp/
 #include "config.h" // Update this file with your configuration
 
-#include <NTPClient.h>
+#include <NTPClient.h> // for the time server
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -38,10 +39,20 @@
 #define     DISPLAY_BRIGHTNESS_OFF  0                           // T-Display-S3 display brightness minimum.  
 #define     TFT_BL                  38                          // T-Display-S3 backlight pin  
 
+#define gray 0x6B6D
+#define blue 0x0967
+#define orange 0xC260
+#define purple 0x604D
+#define green 0x1AE9
+
 // Sprites.
 #define     SPRITE_HEADER_FONT     2                           // HEADER sprite font size.
 #define     SPRITE_HEADER_HEIGHT   30                          // HEADER sprite height in pixels.
 #define     SPRITE_HEADER_WIDTH    DISPLAY_WIDTH               // HEADER sprite width in pixels.
+
+#define     SPRITE_BOADY_FONT     2                           // BOADY sprite font size.
+#define     SPRITE_BOADY_HEIGHT   140                         // BOADY sprite height in pixels.
+#define     SPRITE_BOADY_WIDTH    DISPLAY_WIDTH               // BOADY sprite width in pixels.
 
 #define darkred 0xA041
 
@@ -65,6 +76,7 @@ TFT_eSPI    tft = TFT_eSPI();                                   // T-Display-S3 
 // Sprites.
 TFT_eSprite spriteHeader = TFT_eSprite(& tft);                 // header sprite.
 TFT_eSprite spriteNet = TFT_eSprite(& tft);                 // NET sprite.
+TFT_eSprite spriteBoady = TFT_eSprite(& tft);                 // Boady sprite.
 
 String      stringIP;                                           // IP address.
 String      macaddress;                                           // IP address.
@@ -78,6 +90,12 @@ float rH_list;
 float T_list;
 float TrH_list[2];
 
+
+uint16_t water_detection ;
+float water_leakage = 0;
+float water_leakage_list[2];
+
+float TrHW_list[4];
 float AirQuality_list[4];
 
 const float invalidData = -999;
@@ -97,12 +115,18 @@ String curSeconds="";
 char MQTT_TOPIC_STATE[100]= "";
 char MQTT_TOPIC_CO2VOC[100]= "";
 char MQTT_TOPIC_TRH[100]= "";
+char MQTT_TOPIC_WATER[100]= "";
+
 char MQTT_TOPIC_AIRQUALITY[100]= "";
+char MQTT_TOPIC_TRHW[100]= "";
 
 char device_name[100]= "";
 
 //------------- objects --------------------
-SHTSensor sht;
+String sensor_type = "";
+SHTSensor sht; // temperature & humidity sensor
+Adafruit_seesaw ss; // water sensor
+
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
@@ -211,9 +235,10 @@ void mqttReconnect() {
 }
 
 //---------------------------------------------------------------
-// works only with ArduinoJson 5
 void mqtt_jason_publish(String topic, String dataType, float mylist[], int list_size )
 {
+  // this function works only with ArduinoJson 5
+
   StaticJsonBuffer<300> JSONbuffer;
   JsonObject& JSONencoder = JSONbuffer.createObject();
   JSONencoder["device"] = device_name;
@@ -245,7 +270,8 @@ void ReadSystem(){
   u16 _co2_eq_ppm, _tvoc_ppb;
   float co2_eq_ppm, tvoc_ppb, temp, hum;
 
-    if(sensor_type=="SGP30"){
+    if(sensor_gas)
+    {
         err = sgp_measure_iaq_blocking_read(&_tvoc_ppb, &_co2_eq_ppm);
         co2_eq_ppm = (float) _co2_eq_ppm;
         tvoc_ppb = (float) _tvoc_ppb;
@@ -261,7 +287,7 @@ void ReadSystem(){
           Serial.println("error reading IAQ values\n");
         }
     }
-    else if(sensor_type=="SHT_xx"){
+    if(sensor_sht){
       if (sht.readSample()) {
         T_list=round(sht.getTemperature()*10)/10;
         rH_list=round(sht.getHumidity()*10)/10;
@@ -272,64 +298,72 @@ void ReadSystem(){
         Serial.print("sht_xx: Error in readSample()\n");
       }  
     }
-    else if(sensor_type=="Multi"){
-      err = sgp_measure_iaq_blocking_read(&_tvoc_ppb, &_co2_eq_ppm);
-        co2_eq_ppm = (float) _co2_eq_ppm;
-        tvoc_ppb = (float) _tvoc_ppb;
+    if(sensor_water){
+      water_detection = ss.touchRead(0);
+      Serial.print("water_detection: "); Serial.println(water_detection);
+      if (water_detection > 550 && water_detection < 2000) water_leakage = 1;
+      else water_leakage = 0;
+      water_leakage_list[0]= water_leakage;
+      water_leakage_list[1]= water_detection;
 
-        if (err == STATUS_OK) {
-            CO2_list=co2_eq_ppm;
-            VOC_list=tvoc_ppb;
-        }
-        else{
-          CO2_list= invalidData; VOC_list= invalidData; CO2VOC_list[0]=invalidData; CO2VOC_list[1]=invalidData;
-          Serial.println("error reading IAQ values\n");
-        }
-        
-        if (sht.readSample()) {
-          T_list=round(sht.getTemperature()*10)/10;
-          rH_list=round(sht.getHumidity()*10)/10;
-          TrH_list[0]=T_list;
-          TrH_list[1]=rH_list;
-        }
-        else{
-          T_list= invalidData; rH_list= invalidData; TrH_list[0]=invalidData; TrH_list[1]=invalidData;
-          Serial.print("sht_xx: Error in readSample()\n");
-        } 
-      
-        AirQuality_list[0]=T_list;
-        AirQuality_list[1]=rH_list;
-        AirQuality_list[2]=CO2_list;
-        AirQuality_list[3]=VOC_list; 
+    }
+    
+    if(sensor_gas && sensor_sht){
+      AirQuality_list[0]=T_list;
+      AirQuality_list[1]=rH_list;
+      AirQuality_list[2]=CO2_list;
+      AirQuality_list[3]=VOC_list; 
     }
 
-    else{
-      Serial.println("Sensor is not supported!");
-      return;
-      }
-  
-}
-//----------------------------------------------
-void PrintResults(){
-    Serial.print("CO2(ppm): ");
-    Serial.printf("%4.1f,  ",CO2_list);
+    if(sensor_sht && sensor_water){
+        TrHW_list[0]=T_list;
+        TrHW_list[1]=rH_list;
+        TrHW_list[2]= water_leakage;
+        TrHW_list[3]= water_detection;
+    }
     
-    Serial.print("\n");
-
-    Serial.print("VOC(ppb): ");
-    Serial.printf("%4.1f,  ",VOC_list);
-    
-    Serial.print("\n");
 }
 
 //---------------------------------------------
 void PrintResults_TFT(){
-  if (sensor_type=="SHT_xx"){
-      tft.setTextColor(TFT_MAGENTA, TFT_BLACK);
-      tft.drawString("Temperature(C): "+ String(T_list,1) , 20, 71, 4);
-      tft.setTextColor(TFT_CYAN, TFT_BLACK);
-      tft.drawString("Humidity(%rH): "+ String(rH_list,1) , 20, 111, 4);
+  spriteBoady.fillRect(0 , 0, SPRITE_BOADY_WIDTH, SPRITE_BOADY_HEIGHT, TFT_BLACK);
+  
+  spriteBoady.fillRoundRect(5,5,130,55,4, purple);
+  spriteBoady.fillRoundRect(5,70,130,55,4, TFT_BLUE);
+  
+  if (sensor_sht){
+    spriteBoady.setTextColor(TFT_WHITE, purple);
+    spriteBoady.drawString("T (C)" , 10, 10, 2);
+    spriteBoady.drawString(String(T_list,1) , 50, 30, 4);
+      
+    spriteBoady.setTextColor(TFT_WHITE, TFT_BLUE);
+    spriteBoady.drawString("rH (%)", 10, 75, 2);
+    spriteBoady.drawString(String(rH_list,1) , 50, 95, 4);
+  }
+  
+  if (sensor_water){
+    if (water_leakage){
+      spriteBoady.fillRoundRect(140,5,175,120,4, TFT_RED);
+      spriteBoady.setTextColor(TFT_WHITE, TFT_RED);
+      spriteBoady.drawString("Water leakage" , 150, 10, 4);
+      spriteBoady.drawString("YES" , 200, 60, 4);
+    }  
+    else{
+      spriteBoady.fillRoundRect(140,5,175,120,4, TFT_DARKGREEN);
+      spriteBoady.setTextColor(TFT_WHITE, TFT_DARKGREEN);
+      spriteBoady.drawString("Water leakage" , 150, 10, 4);
+      spriteBoady.drawString("NO" , 200, 60, 4);
     }
+    if (water_detection > 2000){
+      spriteBoady.fillRoundRect(140,5,175,120,4, gray);
+      spriteBoady.setTextColor(TFT_WHITE, gray);
+      spriteBoady.drawString("Water leakage" , 150, 10, 4);
+      spriteBoady.drawString("NO INFO" , 170, 60, 4);
+    }
+  }
+  
+      
+  spriteBoady.pushSprite(0, 40);
 }
 
 
@@ -563,17 +597,38 @@ void MQTT_publish(){
       
   strcat(device_name, device_pref); strcat(device_name, char_helper);
   strcat(MQTT_TOPIC_STATE, device_location); strcat(MQTT_TOPIC_STATE, "/"); strcat(MQTT_TOPIC_STATE, device_name); strcat(MQTT_TOPIC_STATE, "/status");
-  strcat(MQTT_TOPIC_CO2VOC, device_location); strcat(MQTT_TOPIC_CO2VOC, "/"); strcat(MQTT_TOPIC_CO2VOC, device_name); strcat(MQTT_TOPIC_CO2VOC, "/measurements/CO2VOC");
-  strcat(MQTT_TOPIC_TRH, device_location); strcat(MQTT_TOPIC_TRH, "/"); strcat(MQTT_TOPIC_TRH, device_name); strcat(MQTT_TOPIC_TRH, "/measurements/TrH");
-  strcat(MQTT_TOPIC_AIRQUALITY, device_location); strcat(MQTT_TOPIC_AIRQUALITY, "/"); strcat(MQTT_TOPIC_AIRQUALITY, device_name); strcat(MQTT_TOPIC_AIRQUALITY, "/measurements/AQ");
     
   if (!mqttClient.connected()){
     mqttReconnect();
   }
-      
-  if(sensor_type=="SHT_xx") mqtt_jason_publish(MQTT_TOPIC_TRH, "TrH", TrH_list, 2);
-  else if(sensor_type=="SGP30") mqtt_jason_publish(MQTT_TOPIC_CO2VOC, "CO2VOC", CO2VOC_list, 2);
-  else if(sensor_type=="Multi") mqtt_jason_publish(MQTT_TOPIC_AIRQUALITY, "CO2VOC", AirQuality_list, 4);
+
+  if (sensor_type =="Multi"){
+    if (sensor_sht && sensor_gas){
+      strcat(MQTT_TOPIC_AIRQUALITY, device_location); strcat(MQTT_TOPIC_AIRQUALITY, "/"); strcat(MQTT_TOPIC_AIRQUALITY, device_name); strcat(MQTT_TOPIC_AIRQUALITY, "/measurements/AQ");
+      mqtt_jason_publish(MQTT_TOPIC_AIRQUALITY, "AQ", AirQuality_list, 4);
+    }
+    else if (sensor_sht && sensor_water){
+      strcat(MQTT_TOPIC_TRHW, device_location); strcat(MQTT_TOPIC_TRHW, "/"); strcat(MQTT_TOPIC_TRHW, device_name); strcat(MQTT_TOPIC_TRHW, "/measurements/TrHW");
+      mqtt_jason_publish(MQTT_TOPIC_TRHW, "TrHW", TrHW_list, 4);
+    }
+    
+  } 
+  else{ // for single sensors
+    if(sensor_sht){
+      strcat(MQTT_TOPIC_TRH, device_location); strcat(MQTT_TOPIC_TRH, "/"); strcat(MQTT_TOPIC_TRH, device_name); strcat(MQTT_TOPIC_TRH, "/measurements/TrH");
+      mqtt_jason_publish(MQTT_TOPIC_TRH, "TrH", TrH_list, 2);
+    }
+    else if(sensor_gas) {
+      strcat(MQTT_TOPIC_CO2VOC, device_location); strcat(MQTT_TOPIC_CO2VOC, "/"); strcat(MQTT_TOPIC_CO2VOC, device_name); strcat(MQTT_TOPIC_CO2VOC, "/measurements/CO2VOC");
+      mqtt_jason_publish(MQTT_TOPIC_CO2VOC, "CO2VOC", CO2VOC_list, 2);
+    }
+    else if(sensor_water) {
+      strcat(MQTT_TOPIC_WATER, device_location); strcat(MQTT_TOPIC_WATER, "/"); strcat(MQTT_TOPIC_WATER, device_name); strcat(MQTT_TOPIC_WATER, "/measurements/Water");
+      mqtt_jason_publish(MQTT_TOPIC_WATER, "WATER", water_leakage_list, 2);
+    }
+  }
+  
+  
         
   mqttClient.loop();
     
@@ -632,6 +687,9 @@ void setup() {
   spriteNet.createSprite(DISPLAY_WIDTH, DISPLAY_HEIGHT);
   spriteNet.setSwapBytes(true);
 
+  spriteBoady.createSprite(SPRITE_BOADY_WIDTH, SPRITE_BOADY_HEIGHT);
+  spriteBoady.setSwapBytes(true);
+
   welcome_screen();
   
   if (do_wifi)
@@ -646,10 +704,32 @@ void setup() {
   if(do_ota)
     loadConfigs();
   
-  if (sht.init()) {
-      Serial.print("sht_xx: init(): success\n");
-  } else {
-      Serial.print("sht_xx: init(): failed\n");
+  
+  //--- sensors managements
+  if (sensor_sht + sensor_water + sensor_gas >= 2)
+    sensor_type = "Multi";
+  else if (sensor_sht) sensor_type = "TrH";
+  else if (sensor_water) sensor_type = "Water";
+  else if (sensor_gas) sensor_type = "CO2VOC";
+  else sensor_type = "None";
+  
+  if (sensor_sht){
+    if(sht.init()) {
+      Serial.print("sht_xx: init success\n");
+    }
+    else {
+      Serial.print("sht_xx: init failed\n");
+    }
+  }
+
+  if (sensor_water){
+    if (!ss.begin(0x36)) {
+    Serial.println("ERROR! seesaw (water sensor) not found");
+    }
+    else {
+      Serial.print("seesaw (water sensor) started! version: ");
+      Serial.println(ss.getVersion(), HEX);
+    }
   }
     
   mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
@@ -661,7 +741,7 @@ void setup() {
   //all APIs measuring IAQ(Indoor air quality ) output will not change.Default value is 400(ppm) for co2,0(ppb) for tvoc
     
   // Read H2 and Ethanol signal in the way of blocking
-    if (sensor_type != "SHT_xx"){
+    if (sensor_gas){
       while (sgp_probe() != STATUS_OK) {
           Serial.println("SGP failed");
           while (1);
@@ -778,7 +858,7 @@ void loop() {
 
   spriteHeader.pushSprite(2, 5); // draw on coordinates 2,5
   
-  if(sensor_type!="SHT_xx") store_baseline();
+  if(sensor_gas) store_baseline();
     
   delay(_MQTT_PUBLISH_DELAY_ms);
 }
