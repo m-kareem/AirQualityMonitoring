@@ -585,7 +585,7 @@ String GetTime(){
     !timeClient.update()) {
     timeClient.forceUpdate();
   }
-  String formattedTime = timeClient.getFormattedTime();
+  String formattedTime = timeClient.getFormattedDate();
   int splitT = formattedTime.indexOf("T");
   String curTime = formattedTime.substring(splitT+1, formattedTime.length()-1);
   return curTime;
@@ -616,7 +616,7 @@ void setup() {
   // TFT Display.
   pinMode(EN_PIN, INPUT_PULLUP); // Set EN button as input with pull-up resistor
   tft.init();
-  tft.setRotation(1);
+  tft.setRotation(3);
   ledcSetup(0, 10000, 8);
   ledcAttachPin(TFT_BL, 0);
   ledcWrite(0, DISPLAY_BRIGHTNESS_MAX);
