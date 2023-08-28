@@ -375,13 +375,11 @@ void array_to_u32(u32* value, u8* array) {
     (*value) = (*value) | (u32)array[3];
 }
 void u32_to_array(u32 value, u8* array) {
-    if (!array) {
-        return;
-    }
-    array[0] = value >> 24;
-    array[1] = value >> 16;
-    array[2] = value >> 8;
-    array[3] = value;
+  if (!array) return;
+  array[0] = value >> 24;
+  array[1] = value >> 16;
+  array[2] = value >> 8;
+  array[3] = value;
 }
 
 /*
