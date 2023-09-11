@@ -8,9 +8,9 @@ This file is supposed to be running in a docker image.
 By modifying this file, do the following:
 1. stop: docker stop mqttbridge
 2. delete container: docker rm mqttbridge
-3. delete image: docker image remove raqm/mqttbridge
-4. rebuild (in the directory containing the Dockerfile): docker build -t raqm/mqttbridge .
-5. rerun: docker run -d --restart always --name mqttbridge raqm/mqttbridge
+3. delete image: docker rmi mqttbridge
+4. rebuild (in the directory containing the Dockerfile): docker build -t mqttbridge .
+5. rerun: docker run -d --restart always --name mqttbridge mqttbridge
 6. check the status: docker ps -a , the container's status must be Up
 """
 
@@ -24,16 +24,18 @@ import time,datetime
 import json
 
 
-INFLUXDB_ADDRESS = 'Datatbase_server' # insert your database server address here
+#INFLUXDB_ADDRESS = 'SC-L-PH-DEV-GP1.yorku.yorku.ca' # insert your database server address here
+INFLUXDB_ADDRESS = 'influxdb' # this is the influxdb docker container name, defined in docker-compose
 INFLUXDB_USER = 'admin'
-INFLUXDB_PASSWORD = ''
-INFLUXDB_DATABASE = 'your_DB_name' # insert your database name here
+INFLUXDB_PASSWORD = 'admin'
+INFLUXDB_DATABASE = 'FSC_DB' # insert your database name here
 
-MQTT_ADDRESS = 'MQTT_server' # insert your MQTT server address here (usually same as database server)
+#MQTT_ADDRESS = 'SC-L-PH-DEV-GP1.yorku.yorku.ca' # insert your MQTT server address here (usually same as database server)
+MQTT_ADDRESS = 'mosquitto' # insert your MQTT server address here (usually same as database server)
 MQTT_USER = 'mqttuser'
 MQTT_PASSWORD = 'mqttpassword'
-MQTT_TOPIC = 'Lab/+/+/measurements/+' # The MQTT topic 'Lab' is defined in "device_location" in 'AirQuality_mqtt_monitor_LCD_config.h'
-MQTT_REGEX = 'Lab/([^/]+)/([^/]+)/measurements/([^/]+)'
+MQTT_TOPIC = '+/+/+/measurements/+' # The MQTT topic 'Lab' is defined in "device_location" in 'AirQuality_mqtt_monitor_LCD_config.h'
+MQTT_REGEX = r'([^/]+/([^/]+)/([^/]+)/measurements/([^/]+))'
 
 MQTT_CLIENT_ID = 'MQTTInfluxDBBridge'
 noDataValue = -999
@@ -101,40 +103,8 @@ def _parse_mqtt_message(topic, payload):
 
 
 def _send_sensor_data_to_influxdb(sensor_data):
-    if(len(sensor_data.validity)==8):
-        #print("multi-sensor device")
-        json_body = [
-            {
-                'measurement': sensor_data.measurement,
-                'tags': {
-                    'location': sensor_data.location,
-                    'device': sensor_data.device,
-                    'sensor': sensor_data.sensorType,
-                    'validity_1': sensor_data.validity[0],
-                    'validity_2': sensor_data.validity[1],
-                    'validity_3': sensor_data.validity[2],
-                    'validity_4': sensor_data.validity[3],
-                    'validity_5': sensor_data.validity[4],
-                    'validity_6': sensor_data.validity[5],
-                    'validity_7': sensor_data.validity[6],
-                    'validity_8': sensor_data.validity[7]
-                    },
-                    'time': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
-                    'fields': {
-                        'value_1': sensor_data.value[0],
-                        'value_2': sensor_data.value[1],
-                        'value_3': sensor_data.value[2],
-                        'value_4': sensor_data.value[3],
-                        'value_5': sensor_data.value[4],
-                        'value_6': sensor_data.value[5],
-                        'value_7': sensor_data.value[6],
-                        'value_8': sensor_data.value[7]
-                    }
-                }
-            ]
-    else:
-        #print("single-sensor device")
-        json_body = [
+    
+    json_body = [
                 {
                     'measurement': sensor_data.measurement,
                     'tags': {

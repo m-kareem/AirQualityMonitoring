@@ -1,0 +1,60 @@
+# run via: docker-compose -f Air_quality.yaml up -d
+version: "3"
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0.15
+    container_name: mosquitto
+    ports:
+      - 1883:1883
+      - 8883:8883
+      - 9001:9001
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+    restart: always
+  
+  influxdb:
+    image: influxdb:1.8.10
+    container_name: influxdb
+    volumes:
+      - influxdb-storage:/var/lib/influxdb
+    environment:
+      - INFLUXDB_DB=FSC_DB
+      - INFLUXDB_ADMIN_USER=admin
+      - INFLUXDB_ADMIN_PASSWORD=admin
+      - INFLUXDB_USER=YorkUFSC
+      - INFLUXDB_USER_PASSWORD=YorkUFSC
+    ports:
+      - 8086:8086
+    restart: always
+  
+  mqttbridge:
+    image: mqttbridge:1.0.0
+    container_name: mqttbridge
+    depends_on:
+      - influxdb
+
+    restart: always
+  
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=fscyorku
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    depends_on:
+      - influxdb
+    ports:
+      - 3000:3000
+    restart: always
+
+volumes:
+  grafana-storage:
+  influxdb-storage:
+
+# to access the data on the host, use the following commands:
+# docker volume ls
+# docker volume inspect (the name of the volume)

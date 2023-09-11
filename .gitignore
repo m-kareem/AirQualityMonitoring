@@ -1,5 +1,6 @@
 .pio
 .vscode
+build
 .DS_Store
 */.DS_Store
 T-Display-S3/include/config.h
